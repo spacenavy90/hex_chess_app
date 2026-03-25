@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hexagonal Chess</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="ui-header">
+        <button id="flip-btn">Flip Board</button>
+        <div id="turn-display">White to move</div>
+        <div id="status">Last Move: None</div>
+    </div>
+    
+    <div id="main-layout">
+        <div id="game-container">
+            <canvas id="hex-canvas"></canvas>
+        </div>
+
+        <div id="move-log-container">
+            <div id="action-controls">
+                <div class="control-row">
+                    <button id="undo-btn" disabled>⟲ Undo</button>
+                    <button id="redo-btn" disabled>Redo ⟳</button>
+                    <button id="reset-btn">Restart</button>
+                </div>
+                
+                <div class="control-row" style="margin-top: 5px;">
+                    <select id="time-control" style="flex: 1; padding: 4px; background: #444; color: #fff; border: 1px solid #666; border-radius: 4px;">
+                        <option value="unlimited">Unlimited Time</option>
+                        <option value="10+0" selected>10 min flat</option>
+                        <option value="15+10">15 min + 10s</option>
+                        <option value="5+5">5 min + 5s</option>
+                        <option value="3+2">3 min + 2s</option>
+                    </select>
+                </div>
+
+                <div class="player-controls" style="margin-top: 10px;">
+                    <span class="player-label">White:</span>
+                    <button id="w-draw-btn">Offer Draw</button>
+                    <button id="w-resign-btn">Resign</button>
+                </div>
+                <div id="white-timer" class="clock-display">10:00</div>
+
+                <div class="player-controls">
+                    <span class="player-label">Black:</span>
+                    <button id="b-draw-btn">Offer Draw</button>
+                    <button id="b-resign-btn">Resign</button>
+                </div>
+                <div id="black-timer" class="clock-display">10:00</div>
+            </div>
+
+            <div id="captured-pieces">
+                <div id="white-captures" class="capture-box"></div>
+                <div id="black-captures" class="capture-box"></div>
+            </div>
+            
+            <h3>Move History</h3>
+            <div id="move-list"></div>
+        </div>
+    </div>
+
+    <div id="promotion-modal" class="hidden">
+        <h3>Choose Promotion</h3>
+        <div id="promotion-options">
+            <button data-piece="Q">Queen</button>
+            <button data-piece="R">Rook</button>
+            <button data-piece="B">Bishop</button>
+            <button data-piece="N">Knight</button>
+        </div>
+    </div>
+
+    <div id="game-over-modal" class="hidden">
+        <h2 id="game-over-title">Game Over</h2>
+        <p id="game-over-message"></p>
+        <button id="restart-btn">Play Again</button>
+    </div>
+
+    <script src="logic.js"></script>
+</body>
+</html>
