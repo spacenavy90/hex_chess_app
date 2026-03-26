@@ -3,6 +3,7 @@ const ctx = canvas.getContext('2d');
 const flipBtn = document.getElementById('flip-btn');
 const statusDiv = document.getElementById('status');
 const turnDisplay = document.getElementById('turn-display');
+const hoverCoordDisplay = document.getElementById('hover-coord'); // NEW
 
 // Timer State
 let whiteTime = 600; 
@@ -12,6 +13,7 @@ let timerInterval = null;
 let isTimerRunning = false;
 let isUnlimited = false;
 let hasGameStarted = false;
+let hoveredHex = null;
 
 // Board State
 let isFlipped = false;
@@ -79,10 +81,35 @@ const BOARD_LABELS = [
 let lastMove = { from: null, to: null };
 let captures = { w: [], b: [] };
 
+let gameMode = 'hotseat';
+let aiSide = null; // 'w' or 'b'
+
+// Selection Listener
+document.getElementById('mode-select').addEventListener('change', (e) => {
+    gameMode = e.target.value;
+    
+    if (gameMode === 'ai-black') {
+        aiSide = 'b';
+        if (currentTurn === 'b') requestAiMove();
+    } else if (gameMode === 'ai-white') {
+        aiSide = 'w';
+        if (currentTurn === 'w') requestAiMove();
+    } else {
+        aiSide = null;
+    }
+    
+    updateStatus(`Mode: ${gameMode.replace('-', ' ')}`);
+});
+
 // Synthesizer for self-contained sound effects
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let audioCtx = null; // Declare it empty first
 function playSound(type) {
+    // Create it ONLY upon the first time a sound is requested (after a user click)
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
     if (audioCtx.state === 'suspended') audioCtx.resume();
+    
     const osc = audioCtx.createOscillator();
     const gainNode = audioCtx.createGain();
     osc.connect(gainNode);
@@ -172,7 +199,7 @@ function loadState(index) {
     // 2. Restore Timer state
     whiteTime = state.wTime;
     blackTime = state.bTime;
-    hasStart = state.hasStart;
+    hasGameStarted = state.hasStart; // FIXED: variable name
     
     // 3. Sync UI elements
     document.getElementById('white-captures').innerText = captures.w.join('');
@@ -190,7 +217,7 @@ function loadState(index) {
     drawBoard();
 }
 
-// --- NEW ACTION BUTTON LISTENERS ---
+// --- ACTION BUTTON LISTENERS ---
 document.getElementById('undo-btn').addEventListener('click', () => {
     if (currentHistoryIndex > 0) {
         currentHistoryIndex--;
@@ -618,19 +645,7 @@ function updateStatus(message) {
     statusDiv.innerText = message;
 }
 
-function resizeCanvas() {
-    const container = document.getElementById('game-container');
-    canvas.width = container.clientWidth;
-    canvas.height = container.clientHeight;
-    
-    const minDim = Math.min(canvas.width, canvas.height);
-    // Increased divisor to 24 to make room for labels
-    hexSize = minDim / 24; 
-    drawBoard();
-}
-
-// Added isValidMove to color the available destination hexes
-function drawHex(pixelX, pixelY, size, colorIndex, isSelected, isValidMove, isLastMove, isCheck) {
+function drawHex(pixelX, pixelY, size, colorIndex, isSelected, isValidMove, isLastMove, isCheck, isHovered) {
     ctx.beginPath();
     for (let i = 0; i < 6; i++) {
         const angle = i * Math.PI / 3; 
@@ -640,8 +655,9 @@ function drawHex(pixelX, pixelY, size, colorIndex, isSelected, isValidMove, isLa
     }
     ctx.closePath();
 
+    // 1. Handle Fills
     if (isCheck) {
-        ctx.fillStyle = 'rgba(255, 50, 50, 0.8)'; // Bright Red for Check
+        ctx.fillStyle = 'rgba(255, 50, 50, 0.8)';
     } else if (isSelected) {
         ctx.fillStyle = 'rgba(255, 255, 0, 0.5)'; 
     } else if (isValidMove) {
@@ -652,10 +668,19 @@ function drawHex(pixelX, pixelY, size, colorIndex, isSelected, isValidMove, isLa
         ctx.fillStyle = colors[colorIndex];
     }
     ctx.fill();
-    
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
+
+    // 2. Handle Edges (Strokes)
+    if (isHovered) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+    } else {
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    }
 }
 
 // Converts axial hex coordinates directly to canvas pixel coordinates
@@ -810,6 +835,7 @@ function drawBoard() {
             const isSelected = (notation === selectedHex);
             const isValidMove = validMoves.includes(notation);
             const isLastMove = (notation === lastMove.from || notation === lastMove.to);
+            const isHovered = (notation === hoveredHex);
             
             // Determine if this specific hex holds a King in check
             let isCheck = false;
@@ -821,7 +847,7 @@ function drawBoard() {
                 }
             }
             
-            drawHex(px, py, hexSize, colorIndex, isSelected, isValidMove, isLastMove, isCheck);
+            drawHex(px, py, hexSize, colorIndex, isSelected, isValidMove, isLastMove, isCheck, isHovered);
 
             // [Keep the piece rendering logic here]
             if (notation && boardState.has(notation)) {
@@ -854,130 +880,166 @@ function drawBoard() {
 }
 
 // Interaction Logic
-canvas.addEventListener('mousedown', (e) => {
-    if (pendingPromotion || !document.getElementById('game-over-modal').classList.contains('hidden')) return; 
+// --- CENTRAL MOVE EXECUTION ---
+// This function handles the logic for BOTH human and AI moves
+function commitMove(from, to) {
+    const pieceToMove = boardState.get(from);
+    if (!pieceToMove) return false;
+
+    let nextEnPassantTarget = null;
+    const endCoords = notationToAxial(to);
+    let isCapture = boardState.has(to);
+
+    // 1. Handle Captures
+    if (isCapture) trackCapture(boardState.get(to), pieceToMove.color);
+
+    // 2. Pawn Specifics (En Passant & Double Step)
+    if (pieceToMove.type === 'P') {
+        const startCoords = notationToAxial(from);
+        if (to === enPassantTarget) {
+            const captureR = pieceToMove.color === 'w' ? endCoords.r - 1 : endCoords.r + 1;
+            const capturedPawnHex = axialToNotation(endCoords.q, captureR);
+            trackCapture(boardState.get(capturedPawnHex), pieceToMove.color);
+            boardState.delete(capturedPawnHex);
+            isCapture = true;
+        }
+        if (Math.abs(endCoords.r - startCoords.r) === 2) {
+            const skippedR = pieceToMove.color === 'w' ? startCoords.r + 1 : startCoords.r - 1;
+            nextEnPassantTarget = axialToNotation(startCoords.q, skippedR);
+        }
+    }
+
+    // 3. Update Logic State
+    if (pieceToMove.type === 'P' || isCapture) halfMoveClock = 0; else halfMoveClock++;
+    
+    const moveInfo = `${pieceToMove.type}${from}-${to}`;
+    playSound(isCapture ? 'capture' : 'move');
+
+    boardState.set(to, pieceToMove);
+    boardState.delete(from);
+    enPassantTarget = nextEnPassantTarget;
+    lastMove = { from, to };
+
+    // 4. Handle Promotion
+    if (pieceToMove.type === 'P' && isPromotionHex(endCoords.q, endCoords.r, pieceToMove.color)) {
+        pendingPromotion = { notation: to, color: pieceToMove.color, originalNotation: moveInfo };
+        document.getElementById('promotion-modal').classList.remove('hidden');
+        selectedHex = null; validMoves = []; drawBoard();
+        return true; // Stop here; turn finalizes after modal choice
+    }
+
+    // 5. Finalize Turn
+    addToMoveLog(moveInfo, pieceToMove.color);
+    currentTurn = currentTurn === 'w' ? 'b' : 'w';
 
     if (!hasGameStarted) {
         hasGameStarted = true;
         startTimer();
     }
 
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    const { px, py } = { px: mouseX - canvas.width / 2, py: mouseY - canvas.height / 2 };
+    if (!isUnlimited && hasGameStarted) {
+        if (pieceToMove.color === 'w') whiteTime += increment;
+        else blackTime += increment;
+        updateClockUI();
+    }
 
-    // Standard Axial Hex Rounding Logic
+    selectedHex = null;
+    validMoves = [];
+
+    // 6. Game Over Checks
+    const currentHash = getPositionHash();
+    const hashCount = (positionHistory.get(currentHash) || 0) + 1;
+    positionHistory.set(currentHash, hashCount);
+
+    if (isCheckmate(currentTurn)) {
+        triggerGameOver("Checkmate!", `${pieceToMove.color === 'w' ? 'White' : 'Black'} wins.`);
+    } else if (isStalemate(currentTurn)) {
+        triggerGameOver("Stalemate", "Draw.");
+    } else if (hashCount >= 3) {
+        triggerGameOver("Draw", "Threefold Repetition.");
+    } else if (halfMoveClock >= 100) {
+        triggerGameOver("Draw", "50-Move Rule.");
+    } else if (isInsufficientMaterial()) {
+        triggerGameOver("Draw", "Insufficient Material.");
+    } else {
+        updateStatus(isKingInCheck(currentTurn) ? `Check! ${moveInfo}` : `Moved ${moveInfo}`);
+        
+        // --- AI TRIGGER ---
+        if (gameMode !== 'hotseat' && currentTurn === aiSide) {
+            setTimeout(requestAiMove, 250);
+        }
+    }
+
+    saveState();
+    drawBoard();
+    return true;
+}
+
+// --- GET NOTATION FROM MOUSE ---
+function getNotationFromMouse(e) {
+    const rect = canvas.getBoundingClientRect();
+    
+    // Calculate position relative to the canvas center
+    const px = (e.clientX - rect.left) - (rect.width / 2);
+    const py = (e.clientY - rect.top) - (rect.height / 2);
+
     let qFloat = (2/3 * px) / hexSize;
-    let rFloat = (-1/3 * px - Math.sqrt(3)/3 * py) / hexSize; 
+    let rFloat = (-1/3 * px - Math.sqrt(3)/3 * py) / hexSize;
     let sFloat = -qFloat - rFloat;
+    
     let q = Math.round(qFloat), r = Math.round(rFloat), s = Math.round(sFloat);
     const qDiff = Math.abs(q - qFloat), rDiff = Math.abs(r - rFloat), sDiff = Math.abs(s - sFloat);
-    if (qDiff > rDiff && qDiff > sDiff) q = -r - s; else if (rDiff > sDiff) r = -q - s;
-
-    const trueQ = isFlipped ? -q : q;
-    const trueR = isFlipped ? -r : r;
-    const notation = axialToNotation(trueQ, trueR);
     
+    if (qDiff > rDiff && qDiff > sDiff) q = -r - s; 
+    else if (rDiff > sDiff) r = -q - s;
+
+    return axialToNotation(isFlipped ? -q : q, isFlipped ? -r : r);
+}
+
+// --- INTERACTION LOGIC ---
+canvas.addEventListener('mousedown', (e) => {
+    if (pendingPromotion || !document.getElementById('game-over-modal').classList.contains('hidden')) return;
+    
+    const notation = getNotationFromMouse(e);
+
     if (notation) {
         if (selectedHex) {
             if (selectedHex === notation) {
-                selectedHex = null; validMoves = []; updateStatus(`Deselected ${notation}`);
-            } else {
-                const pieceToMove = boardState.get(selectedHex);
-                if (!validMoves.includes(notation)) { updateStatus(`Invalid move`); return; }
-
-                let nextEnPassantTarget = null; 
-                const endCoords = notationToAxial(notation);
-                let isCapture = boardState.has(notation);
-
-                // Execute Captures
-                if (isCapture) trackCapture(boardState.get(notation), pieceToMove.color);
-
-                // Pawn Specific Logic (EP and Double Step)
-                if (pieceToMove.type === 'P') {
-                    const startCoords = notationToAxial(selectedHex);
-                    if (notation === enPassantTarget) {
-                        const captureR = pieceToMove.color === 'w' ? endCoords.r - 1 : endCoords.r + 1;
-                        const capturedPawnHex = axialToNotation(endCoords.q, captureR);
-                        trackCapture(boardState.get(capturedPawnHex), pieceToMove.color);
-                        boardState.delete(capturedPawnHex); 
-                        isCapture = true;
-                    }
-                    if (Math.abs(endCoords.r - startCoords.r) === 2) {
-                        const skippedR = pieceToMove.color === 'w' ? startCoords.r + 1 : startCoords.r - 1;
-                        nextEnPassantTarget = axialToNotation(startCoords.q, skippedR);
-                    }
-                }
-                
-                // 50-Move Rule Clock
-                if (pieceToMove.type === 'P' || isCapture) halfMoveClock = 0; else halfMoveClock++;
-
-                const moveInfo = `${pieceToMove.type}${selectedHex}-${notation}`;
-                playSound(isCapture ? 'capture' : 'move');
-
-                // Move Piece
-                boardState.set(notation, pieceToMove);
-                boardState.delete(selectedHex); 
-                enPassantTarget = nextEnPassantTarget; 
-                lastMove = { from: selectedHex, to: notation };
-                
-                // Promotion check pauses turn progression
-                if (pieceToMove.type === 'P' && isPromotionHex(endCoords.q, endCoords.r, pieceToMove.color)) {
-                    pendingPromotion = { notation, color: pieceToMove.color, originalNotation: moveInfo };
-                    document.getElementById('promotion-modal').classList.remove('hidden');
-                    selectedHex = null; validMoves = []; drawBoard(); return; 
-                }
-
-                // Finalize Turn
-                addToMoveLog(moveInfo, pieceToMove.color);
-                currentTurn = currentTurn === 'w' ? 'b' : 'w'; 
-
-                // Apply increment to the player who just finished their move
-                if (!isUnlimited && hasGameStarted) {
-                    if (pieceToMove.color === 'w') whiteTime += increment;
-                    else blackTime += increment;
-                    updateClockUI();
-                }
-
-                selectedHex = null; validMoves = []; 
-
-                // --- RECORD AND CHECK POSITION HISTORY ---
-                const currentHash = getPositionHash();
-                const hashCount = (positionHistory.get(currentHash) || 0) + 1;
-                positionHistory.set(currentHash, hashCount);
-
-                // --- Game State Evaluation ---
-                if (isCheckmate(currentTurn)) {
-                    triggerGameOver("Checkmate!", `${pieceToMove.color === 'w' ? 'White' : 'Black'} wins.`);
-                } else if (isStalemate(currentTurn)) {
-                    const winner = pieceToMove.color === 'w' ? 'White' : 'Black';
-                    triggerGameOver("Stalemate", `${winner} earns 3/4 point.`);
-                } else if (hashCount >= 3) {
-                    triggerGameOver("Draw", "Threefold Repetition.");
-                } else if (halfMoveClock >= 100) {
-                    triggerGameOver("Draw", "50-Move Rule.");
-                } else if (isInsufficientMaterial()) {
-                    triggerGameOver("Draw", "Insufficient Material.");
-                } else {
-                    updateStatus(isKingInCheck(currentTurn) ? `Check! ${moveInfo}` : `Moved ${moveInfo}`);
-                }
-                saveState();
+                selectedHex = null; validMoves = []; drawBoard();
+            } else if (validMoves.includes(notation)) {
+                commitMove(selectedHex, notation);
             }
         } else if (boardState.has(notation)) {
             const piece = boardState.get(notation);
             if (piece.color === currentTurn) {
                 selectedHex = notation;
-                const pseudoMoves = getPseudoLegalMoves(piece, notation);
-                validMoves = filterLegalMoves(notation, pseudoMoves, piece);
-                if (validMoves.length === 0) updateStatus(`Piece on ${notation} has no moves.`);
-                else updateStatus(`Selected: ${piece.type} on ${notation}`);
-            } else {
-                updateStatus(`Not your turn!`);
+                const pseudo = getPseudoLegalMoves(piece, notation);
+                validMoves = filterLegalMoves(notation, pseudo, piece);
+                drawBoard();
             }
         }
-        drawBoard(); 
     }
+});
+
+// Hover Logic
+canvas.addEventListener('mousemove', (e) => {
+    const notation = getNotationFromMouse(e);
+    
+    if (notation !== hoveredHex) {
+        hoveredHex = notation;
+        if (hoverCoordDisplay) {
+            hoverCoordDisplay.innerText = notation ? `Hex: ${notation}` : `Hex: --`;
+        }
+        drawBoard();
+    }
+});
+
+canvas.addEventListener('mouseleave', () => {
+    hoveredHex = null;
+    if (hoverCoordDisplay) {
+        hoverCoordDisplay.innerText = `Hex: --`;
+    }
+    drawBoard();
 });
 
 // Controls
@@ -985,9 +1047,6 @@ flipBtn.addEventListener('click', () => {
     isFlipped = !isFlipped;
     drawBoard();
 });
-
-// Initialization
-window.addEventListener('resize', resizeCanvas);
 
 // Promotion UI Logic
 document.querySelectorAll('#promotion-options button').forEach(btn => {
@@ -999,25 +1058,19 @@ document.querySelectorAll('#promotion-options button').forEach(btn => {
         };
         
         const p = pendingPromotion;
-        // Replace the pawn with the selected piece
         boardState.set(p.notation, { 
             char: chars[p.color][type], 
             type: type, 
             color: p.color 
         });
         
-        // Add to Move Log with promotion suffix (e.g. P f10-f11=Q)
         addToMoveLog(`${p.originalNotation}=${type}`, p.color);
 
-        // Hide modal and resume game
         document.getElementById('promotion-modal').classList.add('hidden');
         pendingPromotion = null;
         
         currentTurn = currentTurn === 'w' ? 'b' : 'w';
         updateStatus(`Promoted to ${type} on ${p.notation}`);
-        
-        // Update turn display element
-        document.getElementById('turn-display').innerText = `${currentTurn === 'w' ? 'White' : 'Black'} to move`;
         drawBoard();
         saveState();
     });
@@ -1025,23 +1078,155 @@ document.querySelectorAll('#promotion-options button').forEach(btn => {
 
 function addToMoveLog(notation, color) {
     if (color === 'w') {
-        // Create a new row for each full turn starting with White
         const entry = document.createElement('div');
         entry.className = 'move-entry';
         entry.id = `move-${moveCount}`;
         entry.innerHTML = `<span class="move-number">${moveCount}.</span> <span class="white-move">${notation}</span>`;
         moveListElement.appendChild(entry);
     } else {
-        // Find the current move row and append Black's move to it
         const entry = document.getElementById(`move-${moveCount}`);
         if (entry) {
             entry.innerHTML += ` &nbsp;&nbsp; <span class="black-move">${notation}</span>`;
         }
-        moveCount++; // Increment turn counter after Black moves
+        moveCount++; 
     }
-    // Auto-scroll to bottom
     moveListElement.scrollTop = moveListElement.scrollHeight;
 }
 
+// --- FEN STRING GENERATOR ---
+function getFEN() {
+    const fenRanks = [];
+    for (let rank = 11; rank >= 1; rank--) {
+        let emptyCount = 0;
+        let rankStr = "";
+        for (let fileIdx = 0; fileIdx < FILES.length; fileIdx++) {
+            const fileChar = FILES[fileIdx];
+            const notation = `${fileChar}${rank}`;
+            
+            if (boardState.has(notation)) {
+                if (emptyCount > 0) {
+                    rankStr += emptyCount;
+                    emptyCount = 0;
+                }
+                const piece = boardState.get(notation);
+                rankStr += piece.color === 'w' ? piece.type.toUpperCase() : piece.type.toLowerCase();
+            } else {
+                emptyCount++;
+            }
+        }
+        if (emptyCount > 0) {
+            rankStr += emptyCount;
+        }
+        fenRanks.push(rankStr);
+    }
+
+    const boardFEN = fenRanks.join('/');
+    const castling = '-'; 
+    const ep = enPassantTarget || '-';
+    return `${boardFEN} ${currentTurn} ${castling} ${ep} ${halfMoveClock} ${moveCount}`;
+}
+
+document.getElementById('fen-btn').addEventListener('click', () => {
+    const fen = getFEN();
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(fen).then(() => {
+            updateStatus("11x11 FEN copied to clipboard!");
+        }).catch(err => {
+            prompt("Copy FEN:", fen); 
+        });
+    } else {
+        prompt("Copy FEN:", fen);
+    }
+});
+
+const aiWorker = new Worker('ai-worker.js');
+
+aiWorker.onmessage = function(e) {
+    const { type, move, message } = e.data;
+    if (type === 'bestmove') executeAiMove(move);
+    if (type === 'log') console.log("Engine:", message);
+};
+
+function requestAiMove() {
+    if (!hasGameStarted) return;
+    updateStatus("AI is calculating...");
+    
+    aiWorker.postMessage({ 
+        type: 'search', 
+        pieces: Array.from(boardState.entries()), 
+        turn: currentTurn,
+        ep: enPassantTarget,
+        half: halfMoveClock,
+        full: moveCount,
+        depth: 10 
+    });
+}
+
+function executeAiMove(uciMove) {
+    if (uciMove === '(none)') {
+        updateStatus("AI has no moves (Game Over)");
+        return;
+    }
+
+    const from = uciMove.substring(0, 2);
+    const to = uciMove.substring(2, 4);
+    const promotion = uciMove.length > 4 ? uciMove[4] : null;
+
+    setTimeout(() => {
+        commitMove(from, to);
+        
+        if (promotion && pendingPromotion) {
+            const type = promotion.toUpperCase();
+            const chars = {
+                'w': { 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘' },
+                'b': { 'Q': '♛', 'R': '♜', 'B': '♝', 'N': '♞' }
+            };
+            const p = pendingPromotion;
+            boardState.set(p.notation, { 
+                char: chars[p.color][type], 
+                type: type, 
+                color: p.color 
+            });
+            document.getElementById('promotion-modal').classList.add('hidden');
+            pendingPromotion = null;
+            currentTurn = (p.color === 'w') ? 'b' : 'w';
+            
+            updateStatus(`AI promoted to ${type}`);
+            drawBoard();
+            saveState();
+        }
+    }, 600);
+}
+
+function resizeCanvas() {
+    const wrapper = document.getElementById('canvas-wrapper');
+    if (!wrapper) return;
+    
+    const dpr = window.devicePixelRatio || 1;
+    
+    // Use offsetWidth/Height to get the real rendered size
+    const size = Math.min(wrapper.offsetWidth, wrapper.offsetHeight);
+    
+    // Safety check: if size is 0, don't try to draw
+    if (size <= 0) return;
+
+    // Set internal resolution
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    
+    // Set CSS display size
+    canvas.style.width = size + "px";
+    canvas.style.height = size + "px";
+    
+    ctx.resetTransform(); // Clear previous scales
+    ctx.scale(dpr, dpr);
+    
+    // Recalculate hexSize based on 11-hex diameter
+    hexSize = (size / 11) * 0.95 * (1 / Math.sqrt(3));
+    
+    drawBoard();
+}
+
+window.addEventListener('resize', resizeCanvas);
 initializeBoard();
 resizeCanvas();
