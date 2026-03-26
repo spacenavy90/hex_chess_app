@@ -308,14 +308,10 @@ button.primary:hover { background-color: #5fa4f8; }
         border-radius: 8px;
         border: 1px solid #333;
     }
-
-    /* 3. Limit the Move History height so it doesn't take over the screen */
-    .history-container {
-        flex: none;
-    }
     
     #move-list {
-        max-height: 200px;
+        min-height: 200px; 
+        max-height: 400px; 
     }
 }
 
