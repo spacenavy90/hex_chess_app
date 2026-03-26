@@ -28,7 +28,7 @@
 
         <div id="sidebar">
             <div class="control-section">
-                <div class="input-row">
+                <div class="button-grid">
                     <select id="mode-select">
                         <option value="hotseat">Local Hotseat</option>
                         <option value="ai-black">vs AI (Black)</option>
@@ -48,8 +48,8 @@
                     <button id="redo-btn" disabled>Redo ⟳</button>
                 </div>
 
-                <div class="input-row">
-                    <button id="reset-btn" class="danger">Restart Game</button>
+                <div class="button-grid">
+                    <button id="reset-btn">Restart Game</button>
                     <button id="fen-btn">Copy FEN</button>
                 </div>
             </div>
@@ -58,11 +58,13 @@
                 <div class="player-block">
                     <div class="clock-row">
                         <span class="indicator w">W</span>
+                        
+                        <div class="player-actions">
+                            <button id="w-draw-btn">Draw</button>
+                            <button id="w-resign-btn">Resign</button>
+                        </div>
+                        
                         <div id="white-timer" class="clock-display">10:00</div>
-                    </div>
-                    <div class="player-actions">
-                        <button id="w-draw-btn">Draw</button>
-                        <button id="w-resign-btn">Resign</button>
                     </div>
                     <div id="white-captures" class="capture-box"></div>
                 </div>
@@ -70,11 +72,13 @@
                 <div class="player-block">
                     <div class="clock-row">
                         <span class="indicator b">B</span>
+                        
+                        <div class="player-actions">
+                            <button id="b-draw-btn">Draw</button>
+                            <button id="b-resign-btn">Resign</button>
+                        </div>
+                        
                         <div id="black-timer" class="clock-display">10:00</div>
-                    </div>
-                    <div class="player-actions">
-                        <button id="b-draw-btn">Draw</button>
-                        <button id="b-resign-btn">Resign</button>
                     </div>
                     <div id="black-captures" class="capture-box"></div>
                 </div>

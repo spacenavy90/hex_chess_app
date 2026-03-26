@@ -146,15 +146,15 @@ button.primary:hover { background-color: #5fa4f8; }
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 10px; /* Adds breathing room between the indicator, buttons, and clock */
     margin-bottom: 5px;
 }
 
-/* New specific styling for the draw/resign buttons inside the player box */
 .player-actions {
     display: flex;
     gap: 8px;
-    margin-top: 5px;
-    margin-bottom: 5px;
+    flex: 1; /* Forces the buttons to stretch and fill the empty space in the middle */
+    margin: 0; /* Removes the old vertical margins */
 }
 
 .player-actions button {
@@ -317,4 +317,36 @@ button.primary:hover { background-color: #5fa4f8; }
     #move-list {
         max-height: 200px;
     }
+}
+
+/* Color for Restart Game button */
+#reset-btn {
+    background-color: #c0392b;
+    border-color: #a93226;
+}
+#reset-btn:hover {
+    background-color: #e74c3c;
+}
+
+/* Color for Draw buttons */
+#w-draw-btn, #b-draw-btn {
+    background-color: #2980b9;
+    border-color: #2471a3;
+}
+#w-draw-btn:hover, #b-draw-btn:hover {
+    background-color: #3498db;
+}
+
+/* Color for Resign buttons */
+#w-resign-btn, #b-resign-btn {
+    background-color: #7b241c;
+    border-color: #641e16;
+}
+#w-resign-btn:hover, #b-resign-btn:hover {
+    background-color: #922b21;
+}
+
+#mode-select, #time-control {
+    text-align: center;
+    text-align-last: center;
 }

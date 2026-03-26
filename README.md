@@ -2,7 +2,9 @@
 
 A fully playable, browser-based implementation of Glinski's Hexagonal Chess. This project features a custom-built responsive UI, complete move validation logic, and a work-in-progess AI opponent powered by a forked XL boardsize WebAssembly build of Fairy-Stockfish.
 
-![Hexagonal Chess Screenshot](https://i.imgur.com/91o5Pc6.png) ## Features
+![Hexagonal Chess Screenshot](https://i.imgur.com/91o5Pc6.png) 
+
+## Features
 
 * **Complete Rule Enforcement:** Implements the true Glinski's Hexagonal Chess ruleset, including complex piece movement, En Passant, Pawn promotion, Check, Checkmate, and Stalemate detection.
 * **Play vs AI:** Integrated with a custom WebAssembly (WASM) build of Fairy-Stockfish. Play as White or Black against the engine.
@@ -10,7 +12,7 @@ A fully playable, browser-based implementation of Glinski's Hexagonal Chess. Thi
 * **Responsive Canvas Rendering:** The hexagonal board is drawn dynamically using the HTML5 Canvas API, ensuring it remains perfectly proportioned and sharp on both 4K desktop monitors and mobile portrait screens.
 * **Chess Clocks:** Support for various time controls (e.g., 10+0, 15+10) as well as an Unlimited Time mode.
 * **Match Tracking:** Real-time move history log, captured piece tracking, and draw/resign offers.
-* **FEN Export:** Generates custom FEN strings based on an 11x11 bounding box layout, compatible with Fairy-Stockfish.
+* **FEN Export:** Generates custom FEN strings based on an 11x11 bounding box layout.
 * **Procedural Audio:** Lightweight, synthesized sound effects for moves, captures, and game-over states using the Web Audio API.
 
 ## Tech Stack
@@ -32,7 +34,7 @@ A fully playable, browser-based implementation of Glinski's Hexagonal Chess. Thi
 
 ## How to Play Online
 
-### https://spacenavy90.github.io/hex_chess_app/
+#### https://spacenavy90.github.io/hex_chess_app/
 
 ## How to Run Locally
 

@@ -687,9 +687,15 @@ function drawHex(pixelX, pixelY, size, colorIndex, isSelected, isValidMove, isLa
 function getHexPixels(q, r) {
     const renderQ = isFlipped ? -q : q;
     const renderR = isFlipped ? -r : r;
+    
+    // FIX: Divide by the device pixel ratio to find the true CSS center
+    const dpr = window.devicePixelRatio || 1;
+    const centerX = (canvas.width / dpr) / 2;
+    const centerY = (canvas.height / dpr) / 2;
+    
     return {
-        px: (canvas.width / 2) + hexSize * 1.5 * renderQ,
-        py: (canvas.height / 2) - hexSize * Math.sqrt(3) * (renderR + renderQ / 2)
+        px: centerX + hexSize * 1.5 * renderQ,
+        py: centerY - hexSize * Math.sqrt(3) * (renderR + renderQ / 2)
     };
 }
 
