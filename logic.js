@@ -1203,26 +1203,20 @@ function resizeCanvas() {
     if (!wrapper) return;
     
     const dpr = window.devicePixelRatio || 1;
-    
-    // Use offsetWidth/Height to get the real rendered size
     const size = Math.min(wrapper.offsetWidth, wrapper.offsetHeight);
     
-    // Safety check: if size is 0, don't try to draw
     if (size <= 0) return;
 
-    // Set internal resolution
     canvas.width = size * dpr;
     canvas.height = size * dpr;
-    
-    // Set CSS display size
     canvas.style.width = size + "px";
     canvas.style.height = size + "px";
     
-    ctx.resetTransform(); // Clear previous scales
+    ctx.resetTransform(); 
     ctx.scale(dpr, dpr);
     
-    // Recalculate hexSize based on 11-hex diameter
-    hexSize = (size / 11) * 0.95 * (1 / Math.sqrt(3));
+    // Reduced scaling factor from 0.95 to 0.85 for label clearance
+    hexSize = (size / 11) * 0.85 * (1 / Math.sqrt(3));
     
     drawBoard();
 }
