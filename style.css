@@ -223,8 +223,10 @@ button.primary:hover { background-color: #5fa4f8; }
 
 /* HISTORY */
 .history-section {
-    flex: 1 1 auto;
-    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0%; /* Critical: Forces container to fit available space, not content */
+    min-height: 150px; 
 }
 
 .section-title {
@@ -235,7 +237,7 @@ button.primary:hover { background-color: #5fa4f8; }
 }
 
 #move-list {
-    flex: 1 1 auto;
+    flex: 1 1 0%; /* Critical: Forces the list to stay inside its parent and scroll */
     overflow-y: auto;
     background-color: #111;
     border: 1px solid #333;
@@ -273,47 +275,47 @@ button.primary:hover { background-color: #5fa4f8; }
 #promotion-options { display: flex; gap: 10px; margin-top: 15px; }
 #game-over-message { margin: 15px 0; color: #ccc; }
 
-/* MOBILE RESPONSIVE FIX */
 @media (max-width: 850px) {
     body { height: auto; overflow-y: auto; }
     #main-layout { flex-direction: column; height: auto; }
     
     /* 1. Limit the board to 50% of screen height so the sidebar is visible */
     #game-container { 
-        width: 100%; 
+        width: 100vw; 
         height: 50vh; 
         padding: 10px; 
         flex: none; 
     }
 
     #sidebar { 
+        flex: none; /* Prevents sidebar from squishing */
         width: 100%; 
         border-left: none; 
-        border-top: 1px solid var(--border); 
+        border-top: 1px solid #333; 
         padding: 15px;
     }
 
     /* 2. Put Timers side-by-side to save vertical space */
-    #sidebar .sidebar-group:nth-child(2) {
+    .status-section {
         flex-direction: row;
-        gap: 10px;
     }
 
-    .player-status-row {
+    .player-block {
         flex: 1;
-        flex-direction: column;
-        align-items: center;
-        background: #181818;
-        padding: 10px;
-        border-radius: 8px;
-        border: 1px solid #333;
+    }
+    
+    .clock-row {
+        flex-wrap: wrap; /* Allows buttons to drop below the clock if the screen is narrow */
+        justify-content: center;
     }
 
-    .history-container {
+    /* 3. Force the move list to have a readable height */
+    .history-section {
         flex: none;
     }
     
     #move-list {
+        flex: none;
         min-height: 150px; 
         max-height: 300px; 
     }
